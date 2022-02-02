@@ -23,7 +23,7 @@
 #include "mdss_dsi_clk.h"
 #include <linux/interrupt.h>
 
-#define MAX_RECOVERY_TRIALS 10
+#define MAX_RECOVERY_TRIALS 3
 #define MAX_SESSIONS 2
 
 #define SPLIT_MIXER_OFFSET 0x800
@@ -904,7 +904,7 @@ int mdss_mdp_resource_control(struct mdss_mdp_ctl *ctl, u32 sw_event)
 				schedule_work(&ctx->gate_clk_work);
 
 			/* start work item to shut down after delay */
-			schedule_delayed_work(
+			queue_delayed_work(system_power_efficient_wq,
 					&ctx->delayed_off_clk_work,
 					CMD_MODE_IDLE_TIMEOUT);
 		}
@@ -1068,7 +1068,8 @@ int mdss_mdp_resource_control(struct mdss_mdp_ctl *ctl, u32 sw_event)
 			 * reached. This is to prevent the case where early wake
 			 * up is called but no frame update is sent.
 			 */
-			schedule_delayed_work(&ctx->delayed_off_clk_work,
+			queue_delayed_work(system_power_efficient_wq,
+                                &ctx->delayed_off_clk_work,
 				      CMD_MODE_IDLE_TIMEOUT);
 			pr_debug("off work scheduled\n");
 		}
@@ -1195,7 +1196,7 @@ static int mdss_mdp_cmd_wait4readptr(struct mdss_mdp_cmd_ctx *ctx)
 {
 	int rc = 0;
 
-	rc = wait_event_timeout(ctx->rdptr_waitq,
+	rc = wait_event_interruptible_timeout(ctx->rdptr_waitq,
 			atomic_read(&ctx->rdptr_cnt) == 0,
 			KOFF_TIMEOUT);
 	if (rc <= 0) {
@@ -2069,7 +2070,7 @@ static int __mdss_mdp_wait4pingpong(struct mdss_mdp_cmd_ctx *ctx)
 	s64 time;
 
 	do {
-		rc = wait_event_timeout(ctx->pp_waitq,
+		rc = wait_event_interruptible_timeout(ctx->pp_waitq,
 				atomic_read(&ctx->koff_cnt) == 0,
 				KOFF_TIMEOUT);
 		time = ktime_to_ms(ktime_get());

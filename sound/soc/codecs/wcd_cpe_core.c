@@ -34,7 +34,7 @@
 #include "wcd_cpe_services.h"
 #include "wcd_cmi_api.h"
 
-#define CMI_CMD_TIMEOUT (10 * HZ)
+#define CMI_CMD_TIMEOUT msecs_to_jiffies(1000)
 #define WCD_CPE_LSM_MAX_SESSIONS 2
 #define WCD_CPE_AFE_MAX_PORTS 4
 #define AFE_SVC_EXPLICIT_PORT_START 1
@@ -61,8 +61,8 @@
 }
 
 #define WCD_CPE_STATE_MAX_LEN 11
-#define CPE_OFFLINE_WAIT_TIMEOUT (2 * HZ)
-#define CPE_READY_WAIT_TIMEOUT (3 * HZ)
+#define CPE_OFFLINE_WAIT_TIMEOUT msecs_to_jiffies(200)
+#define CPE_READY_WAIT_TIMEOUT msecs_to_jiffies(300)
 #define WCD_CPE_SYSFS_DIR_MAX_LENGTH 32
 
 #define CPE_ERR_IRQ_CB(core) \
@@ -2916,7 +2916,7 @@ static int wcd_cpe_send_param_snd_model(struct wcd_cpe_core *core,
 	struct cmi_obm_msg obm_msg;
 	struct cpe_param_data *param_d;
 
-
+	obm_msg.hdr.hdr_info = 0;
 	ret = fill_cmi_header(&obm_msg.hdr, session->id,
 			CMI_CPE_LSM_SERVICE_ID, 0, 20,
 			CPE_LSM_SESSION_CMD_SET_PARAMS_V2, true);

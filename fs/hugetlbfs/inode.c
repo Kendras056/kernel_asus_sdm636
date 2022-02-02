@@ -414,7 +414,7 @@ static void remove_inode_hugepages(struct inode *inode, loff_t lstart,
 			if (next >= end)
 				break;
 
-			hash = hugetlb_fault_mutex_hash(h, mapping, next, 0);
+			hash = hugetlb_fault_mutex_hash(h, mapping, next);
 			mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 			lock_page(page);
@@ -630,7 +630,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 		addr = index * hpage_size;
 
 		/* mutex taken here, fault path and hole punch */
-		hash = hugetlb_fault_mutex_hash(h, mapping, index, addr);
+		hash = hugetlb_fault_mutex_hash(h, mapping, index);
 		mutex_lock(&hugetlb_fault_mutex_table[hash]);
 
 		/* See if already present in mapping to avoid alloc/free */
@@ -886,7 +886,10 @@ static int hugetlbfs_migrate_page(struct address_space *mapping,
 		set_page_private(page, 0);
 	}
 
-	migrate_page_copy(newpage, page);
+	if (mode != MIGRATE_SYNC_NO_COPY)
+		migrate_page_copy(newpage, page);
+	else
+		migrate_page_states(newpage, page);
 
 	return MIGRATEPAGE_SUCCESS;
 }

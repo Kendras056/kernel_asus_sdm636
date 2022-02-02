@@ -2638,6 +2638,11 @@ static int therm_get_temp(uint32_t id, enum sensor_id_type type, int *temp)
 		goto get_temp_exit;
 	}
 
+	if (id == -19) {
+		ret = -EINVAL;
+		goto get_temp_exit;
+	}
+
 	switch (type) {
 	case THERM_ZONE_ID:
 		ret = sensor_get_temp(id, temp);
@@ -2697,6 +2702,11 @@ int sensor_mgr_set_threshold(uint32_t zone_id,
 
 	if (!threshold) {
 		pr_err("Invalid input\n");
+		ret = -EINVAL;
+		goto set_threshold_exit;
+	}
+
+	if (zone_id == -19) {
 		ret = -EINVAL;
 		goto set_threshold_exit;
 	}
@@ -3179,7 +3189,8 @@ static int __ref update_offline_cores(int val)
 
 	if (pend_hotplug_req && !in_suspend && !retry_in_progress) {
 		retry_in_progress = true;
-		schedule_delayed_work(&retry_hotplug_work,
+		queue_delayed_work(system_power_efficient_wq,
+			&retry_hotplug_work,
 			msecs_to_jiffies(HOTPLUG_RETRY_INTERVAL_MS));
 	}
 
@@ -3673,8 +3684,9 @@ static void check_temp(struct work_struct *work)
 
 reschedule:
 	if (polling_enabled)
-		schedule_delayed_work(&check_temp_work,
-				msecs_to_jiffies(msm_thermal_info.poll_ms));
+		queue_delayed_work(system_power_efficient_wq,
+			&check_temp_work,
+			msecs_to_jiffies(msm_thermal_info.poll_ms));
 }
 
 static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
@@ -3769,6 +3781,8 @@ static int hotplug_init_cpu_offlined(void)
 	mutex_lock(&core_control_mutex);
 	for_each_possible_cpu(cpu) {
 		if (!(msm_thermal_info.core_control_mask & BIT(cpus[cpu].cpu)))
+			continue;
+		if (cpus[cpu].sensor_id == -19)
 			continue;
 		if (therm_get_temp(cpus[cpu].sensor_id, cpus[cpu].id_type,
 					&temp)) {
@@ -4982,6 +4996,49 @@ static struct kernel_param_ops module_ops = {
 module_param_cb(enabled, &module_ops, &enabled, 0644);
 MODULE_PARM_DESC(enabled, "enforce thermal limit on cpu");
 
+/* Poll ms */
+module_param_named(poll_ms, msm_thermal_info.poll_ms, uint, 0664);
+
+/* Temp Threshold */
+module_param_named(temp_threshold, msm_thermal_info.limit_temp_degC,
+			int, 0664);
+module_param_named(core_limit_temp_degC, msm_thermal_info.core_limit_temp_degC,
+		   uint, 0644);
+module_param_named(hotplug_temp_degC, msm_thermal_info.hotplug_temp_degC,
+		   uint, 0644);
+module_param_named(freq_mitig_temp_degc,
+		   msm_thermal_info.freq_mitig_temp_degc, uint, 0644);
+module_param_named(limit_temp_degC, msm_thermal_info.limit_temp_degC,
+			int, 0664);
+
+/* Control Mask */
+module_param_named(freq_control_mask,
+		   msm_thermal_info.bootup_freq_control_mask, uint, 0644);
+module_param_named(core_control_mask, msm_thermal_info.core_control_mask,
+			uint, 0664);
+module_param_named(freq_mitig_control_mask,
+		   msm_thermal_info.freq_mitig_control_mask, uint, 0644);
+
+/* extended module parameters */
+module_param_named(temp_hysteresis_degC, msm_thermal_info.temp_hysteresis_degC,
+                        int, 0664);
+module_param_named(freq_step, msm_thermal_info.bootup_freq_step,
+			uint, 0644);
+module_param_named(core_temp_hysteresis_degC, msm_thermal_info.core_temp_hysteresis_degC,
+                        int, 0664);
+module_param_named(hotplug_temp, msm_thermal_info.hotplug_temp_degC,
+			uint, 0644);
+module_param_named(thermal_limit_high, limit_idx_high,
+			int, 0664);
+module_param_named(thermal_limit_low, limit_idx_low,
+			int, 0664);
+module_param_named(hotplug_temp_hysteresis, msm_thermal_info.hotplug_temp_hysteresis_degC,
+			uint, 0644);
+module_param_named(psm_temp, msm_thermal_info.psm_temp_degC,
+			uint, 0644);
+module_param_named(psm_temp_hysteresis, msm_thermal_info.psm_temp_hyst_degC,
+			uint, 0644);
+
 static ssize_t show_cc_enabled(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -6019,11 +6076,6 @@ static int probe_vdd_mx(struct device_node *node,
 		return ret;
 	}
 
-	key = "qcom,mx-restriction-temp";
-	ret = of_property_read_u32(node, key, &data->vdd_mx_temp_degC);
-	if (ret)
-		goto read_node_done;
-
 	key = "qcom,mx-restriction-temp-hysteresis";
 	ret = of_property_read_u32(node, key, &data->vdd_mx_temp_hyst_degC);
 	if (ret)
@@ -6361,7 +6413,7 @@ static int fetch_cpu_mitigaiton_info(struct msm_thermal_data *data,
 		}
 		sensor_name_len = strlen(sensor_name);
 		strlcpy((char *) cpus[_cpu].sensor_type, sensor_name,
-			sensor_name_len + 1);
+			strlen((char *) cpus[_cpu].sensor_type) + 1);
 		create_alias_name(_cpu, limits, pdev);
 	}
 
@@ -6545,11 +6597,6 @@ static int probe_ocr(struct device_node *node, struct msm_thermal_data *data,
 		goto read_ocr_exit;
 	}
 
-	key = "qcom,pmic-opt-curr-temp";
-	ret = of_property_read_u32(node, key, &data->ocr_temp_degC);
-	if (ret)
-		goto read_ocr_fail;
-
 	key = "qcom,pmic-opt-curr-temp-hysteresis";
 	ret = of_property_read_u32(node, key, &data->ocr_temp_hyst_degC);
 	if (ret)
@@ -6662,11 +6709,6 @@ static int probe_psm(struct device_node *node, struct msm_thermal_data *data,
 		psm_rails_cnt = 0;
 		return ret;
 	}
-
-	key = "qcom,pmic-sw-mode-temp";
-	ret = of_property_read_u32(node, key, &data->psm_temp_degC);
-	if (ret)
-		goto read_node_fail;
 
 	key = "qcom,pmic-sw-mode-temp-hysteresis";
 	ret = of_property_read_u32(node, key, &data->psm_temp_hyst_degC);
@@ -6794,12 +6836,6 @@ static int probe_gfx_phase_ctrl(struct device_node *node,
 		return ret;
 	}
 
-	key = "qcom,gfx-sensor-id";
-	ret = of_property_read_u32(node, key,
-		&data->gfx_sensor);
-	if (ret)
-		goto probe_gfx_exit;
-
 	key = "qcom,gfx-phase-resource-key";
 	ret = of_property_read_string(node, key,
 		&tmp_str);
@@ -6897,13 +6933,6 @@ static int probe_cx_phase_ctrl(struct device_node *node,
 		return ret;
 	}
 
-	key = "qcom,rpm-phase-resource-type";
-	ret = of_property_read_string(node, key,
-		&tmp_str);
-	if (ret)
-		goto probe_cx_exit;
-	data->phase_rpm_resource_type = msm_thermal_str_to_int(tmp_str);
-
 	key = "qcom,rpm-phase-resource-id";
 	ret = of_property_read_u32(node, key,
 		&data->phase_rpm_resource_id);
@@ -6998,11 +7027,6 @@ static int probe_freq_mitigation(struct device_node *node,
 {
 	char *key = NULL;
 	int ret = 0;
-
-	key = "qcom,limit-temp";
-	ret = of_property_read_u32(node, key, &data->limit_temp_degC);
-	if (ret)
-		goto PROBE_FREQ_EXIT;
 
 	key = "qcom,temp-hysteresis";
 	ret = of_property_read_u32(node, key, &data->temp_hysteresis_degC);
@@ -7619,3 +7643,8 @@ int __init msm_thermal_late_init(void)
 	return 0;
 }
 late_initcall(msm_thermal_late_init);
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Praveen Chidambaram <pchidamb@codeaurora.org>");
+MODULE_AUTHOR("Paul Reioux <reioux@gmail.com>");
+MODULE_DESCRIPTION("Based on intelligent thermal driver version 2 for Qualcomm based SOCs");
+MODULE_DESCRIPTION("originally from Qualcomm's open source repo");

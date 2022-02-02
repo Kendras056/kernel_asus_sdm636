@@ -1071,7 +1071,7 @@ static void stk_ps_report(struct stk3x1x_data *ps_data, int nf)
 	input_event(ps_data->ps_input_dev, EV_SYN, SYN_REPORT,0);
 #endif
 	input_sync(ps_data->ps_input_dev);
-	wake_lock_timeout(&ps_data->ps_wakelock, 3*HZ);
+	wake_lock_timeout(&ps_data->ps_wakelock, msecs_to_jiffies(20));
 }
 
 static void stk_als_report(struct stk3x1x_data *ps_data, int als)
@@ -1404,7 +1404,7 @@ static int32_t stk3x1x_enable_ps(struct stk3x1x_data *ps_data, uint8_t enable, u
 			near_far_state = ret & STK_FLG_NF_MASK;
 #endif
 			stk_ps_report(ps_data, near_far_state);
-			printk(KERN_INFO "%s: ps input event=%d, ps=%d\n",__func__, near_far_state, reading);
+			pr_debug("%s: ps input event=%d, ps=%d\n",__func__, near_far_state, reading);
 		}
 #ifdef STK_POLL_PS
 		hrtimer_start(&ps_data->ps_timer, ps_data->ps_poll_delay, HRTIMER_MODE_REL);
@@ -4123,7 +4123,7 @@ static int stk3x1x_suspend(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 #endif
 
-	printk(KERN_INFO "%s\n", __func__);
+	pr_debug("%s\n", __func__);
 #ifndef SPREADTRUM_PLATFORM
 	mutex_lock(&ps_data->io_lock);
 #endif
@@ -4192,7 +4192,7 @@ static int stk3x1x_resume(struct device *dev)
 	struct i2c_client *client = to_i2c_client(dev);
 #endif
 
-	printk(KERN_INFO "%s\n", __func__);
+	pr_debug("%s\n", __func__);
 #ifndef SPREADTRUM_PLATFORM
 	mutex_lock(&ps_data->io_lock);
 #endif

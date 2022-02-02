@@ -114,7 +114,7 @@ int ipa3_disable_data_path(u32 clnt_hdl)
 		if (ipa3_ctx->apply_rg10_wa && ipa3_uc_state_check()) {
 			IPADBG("uC is not loaded yet, waiting...\n");
 			res = wait_for_completion_timeout(
-				&ipa3_ctx->uc_loaded_completion_obj, 60 * HZ);
+				&ipa3_ctx->uc_loaded_completion_obj, IPA_TIMEOUT(60));
 			if (res == 0)
 				IPADBG("timeout waiting for uC to load\n");
 		}
@@ -2100,7 +2100,7 @@ start_chan_fail:
 
 int ipa3_xdci_resume(u32 ul_clnt_hdl, u32 dl_clnt_hdl, bool is_dpl)
 {
-	struct ipa3_ep_context *ul_ep, *dl_ep;
+	struct ipa3_ep_context *ul_ep = NULL, *dl_ep;
 	enum gsi_status gsi_res;
 	struct ipa_ep_cfg_ctrl ep_cfg_ctrl;
 

@@ -41,7 +41,7 @@
 
 int sysctl_panic_on_oom;
 int sysctl_oom_kill_allocating_task;
-int sysctl_oom_dump_tasks = 1;
+int sysctl_oom_dump_tasks;
 
 DEFINE_MUTEX(oom_lock);
 
@@ -215,7 +215,7 @@ static enum oom_constraint constrained_alloc(struct oom_control *oc,
 	int nid;
 
 	/* Default to all available memory */
-	*totalpages = totalram_pages + total_swap_pages;
+	*totalpages = totalram_pages() + total_swap_pages;
 
 	if (!oc->zonelist)
 		return CONSTRAINT_NONE;
@@ -258,7 +258,7 @@ static enum oom_constraint constrained_alloc(struct oom_control *oc,
 static enum oom_constraint constrained_alloc(struct oom_control *oc,
 					     unsigned long *totalpages)
 {
-	*totalpages = totalram_pages + total_swap_pages;
+	*totalpages = totalram_pages() + total_swap_pages;
 	return CONSTRAINT_NONE;
 }
 #endif
@@ -685,7 +685,7 @@ bool out_of_memory(struct oom_control *oc)
 	unsigned int uninitialized_var(points);
 	enum oom_constraint constraint = CONSTRAINT_NONE;
 
-	if (oom_killer_disabled)
+	if (oom_killer_disabled || IS_ENABLED(CONFIG_ANDROID_SIMPLE_LMK))
 		return false;
 
 	blocking_notifier_call_chain(&oom_notify_list, 0, &freed);
@@ -758,6 +758,9 @@ void pagefault_out_of_memory(void)
 	};
 
 	if (mem_cgroup_oom_synchronize(true))
+		return;
+
+	if (fatal_signal_pending(current))
 		return;
 
 	if (!mutex_trylock(&oom_lock))
